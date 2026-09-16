@@ -23,5 +23,16 @@ chroma/
 .DS_Store
 Thumbs.db
 
+# AI agent config — local only, not part of the submission
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+AGENTS.md
+.cursor/
+.cursorrules
+.codex/
+.gemini/
+GEMINI.md
+
 # NOTE: results/ is deliberately NOT ignored. Your run logs are evidence that
 # the test actually happened, and they're part of what gets graded. Commit them.
