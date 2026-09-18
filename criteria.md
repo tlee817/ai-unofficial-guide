@@ -23,8 +23,13 @@ For at least 4 of my 5 test questions, the retrieved chunks include one that
 contains the answer.
 
 **Why this target:**
-<!-- e.g. "One of my questions is about a topic only two documents mention, so
-     I expect that one to be hard." -->
+Q5 (mobile coverage in Corry Vale) is built to be hard on purpose. The correct
+sentence is in one section of `guide_accessibility.md`, while nine word-for-word
+identical `## Practical notes` chunks across the town guides say coverage is
+"good in the centre" and can crowd the top-5. Q4's direct answer is in a
+cross-cutting guide (`guide_eating.md`) rather than the town's own. I expect
+one of those two to miss. Expecting both to hit would be pretending the corpus
+is cleaner than it is.
 
 ---
 
@@ -33,8 +38,12 @@ contains the answer.
 Every answer the system produces names at least one source document.
 
 **Why this target:**
-<!-- Why all five and not four? What about your setup makes that achievable —
-     or what would have to go wrong for it not to be? -->
+`generate.py::build_prompt` labels every chunk `[from filename]`, and the
+`GROUNDING_INSTRUCTION` tells the model to name the file it used. The gate
+refuses before any answer can be produced without chunks, so there is never an
+answer with nothing to cite. The only failure path left is the model ignoring
+an explicit instruction on a ~1,000-token prompt. If that happens even once in
+five, the prompt needs fixing, not the target — so it has to be all five.
 
 ---
 
@@ -50,48 +59,49 @@ in at least 4 of 5 tries.
      just keep five of them, or the "4 of 5" above has nothing to be 4 of. -->
 
 **Why this target:**
-<!-- What did your distances look like when you set the cutoff in Milestone 4?
-     Was there a clean gap, or did the two groups overlap? -->
+I have one data point so far: the Milestone 1 question ("how do I get to
+Kestrelford?") scored 0.445 against the 0.6 cutoff. I have not measured the
+out-of-scope group yet — that is Milestone 4. I'm keeping 4 of 5 rather than
+5 of 5 because one `OUT_OF_SCOPE` question, ibuprofen dosage for a headache,
+overlaps the corpus's own "minor injuries unit" and "hospital" wording, which
+appears in nine boilerplate chunks, so it may land closer than the other four.
+If Milestone 4 shows a clean gap, this target was too loose and I'll say so in
+unit 2.
 
 ---
 
-## 4. Something about your chunks
+## 4. Chunks respect section boundaries
 
-<!-- YOU WRITE THIS ONE.
-
-     How would you know if your chunks were the right size? Name something
-     countable or observable.
-
-     Examples of the right shape — don't copy these, they should come from
-     what you actually saw in Milestone 3:
-       - "At least 4 of 5 sampled chunks read as a complete thought, with no
-          sentence cut in half at either end."
-       - "No chunk is shorter than 200 characters, since anything below that
-          in my corpus turned out to be a heading with no content under it." -->
-
-
+All 5 chunks printed by `python app.py chunks -n 5` start at a heading (`#` or
+`##`) or the start of a paragraph, and end at the end of a sentence — no
+sentence or word cut at either edge. Additionally, no chunk in the index is
+shorter than 150 characters.
 
 **Why this target:**
-
-
+Every one of the 84 `##` sections in `city_guides` is between 158 and 691
+characters (measured in Milestone 1), so a section always fits in one chunk at
+any sensible size. The starter's fixed 800-character windows currently produce
+a chunk ending in `## Eat and drin` and a 24-character tail fragment — that is
+exactly the failure this criterion catches. 5 of 5 rather than 4 of 5 because
+there is no hard case to excuse: a single cut sentence means the chunker
+ignored the structure. The 150-character floor is the observable for "no
+leftover fragments"; the shortest real section is 158.
 
 ---
 
-## 5. Your choice
+## 5. The named source is the right one
 
-<!-- YOU WRITE THIS ONE TOO.
-
-     Pick something you actually care about getting right. It could be about
-     speed, about refusals, about a particular kind of question your corpus
-     handles badly, about source attribution being correct rather than merely
-     present — anything, as long as it names a number or an observable
-     outcome. -->
-
-
+For 5 of 5 test questions, at least one file the answer names actually
+contains the `expects` phrase for that question.
 
 **Why this target:**
-
-
+Criterion 2 only checks that *a* file is named. In this corpus a plausible
+wrong citation is easy: nine town guides contain identical boilerplate, and
+that boilerplate contradicts `guide_accessibility.md` on where the hospital is
+and whether Corry Vale has coverage — so the model can cite a real file that
+does not hold the fact. 5 of 5 because a wrong citation is worse than none: a
+reader who opens the named file and finds nothing stops trusting the system.
+Checkable without judgement — grep the named file for the `expects` phrase.
 
 ---
 
