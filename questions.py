@@ -22,12 +22,33 @@ names a target of "4 of 5", and four of three is not a thing.
 """
 
 QUESTIONS = [
-    # {"question": "...", "expects": "..."},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
+    # Corpus: city_guides. Each `expects` is the corpus's own word for the
+    # answer, so a correct reply should contain it verbatim.
+    #
+    # Q1-Q3 are single facts in a single sentence. Q4's direct answer is in a
+    # cross-cutting guide rather than the town's own. Q5 is deliberately hard:
+    # the true answer is one sentence in guide_accessibility.md, while nine
+    # identical "Practical notes" boilerplate sections say the opposite.
+    {
+        "question": "Which day of the week is the Kestrelford market?",
+        "expects": "Saturday",
+    },
+    {
+        "question": "Which day is the Givens Mill tearoom closed?",
+        "expects": "Tuesday",
+    },
+    {
+        "question": "Where is the free car park in Pellew Sands?",
+        "expects": "behind the station",
+    },
+    {
+        "question": "Which town in the region has restaurant kitchens that serve after 9pm?",
+        "expects": "Marchwood",
+    },
+    {
+        "question": "Is there mobile phone coverage in Corry Vale?",
+        "expects": "absent",
+    },
 ]
 
 # Questions from a different world entirely. Your gate should refuse all five.
