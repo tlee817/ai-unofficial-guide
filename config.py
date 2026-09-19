@@ -24,11 +24,19 @@ CORPUS = os.getenv("AI201_CORPUS", "city_guides")
 
 
 # ─── Chunking (Milestone 3) ──────────────────────────────────────────────────
-# These are deliberately plain, generic numbers. Milestone 3 is where you
-# replace them with numbers that fit the documents you actually read.
+# city_guides is split one paragraph per chunk, each prefixed with the
+# document's title and the paragraph's ## heading. The author already divided
+# every guide into self-contained paragraphs of 70–500 characters, so the
+# chunker follows those boundaries instead of counting characters. These three
+# numbers are the guard rails around that, not the chunking itself.
 
-CHUNK_SIZE = 800        # characters per chunk
-CHUNK_OVERLAP = 120     # characters shared between neighbouring chunks
+CHUNK_SIZE = 800        # ceiling. A paragraph longer than this is split on
+                        # sentence ends. Never reached on city_guides (max 509).
+CHUNK_OVERLAP = 0       # overlap repairs cuts mid-thought; this chunker never
+                        # cuts mid-thought, so there is nothing to repair.
+CHUNK_MIN = 150         # floor, from criterion 4. A paragraph that would come
+                        # out shorter (prefix included) is merged into its
+                        # neighbour in the same section.
 
 
 # ─── Retrieval (Milestone 4) ─────────────────────────────────────────────────

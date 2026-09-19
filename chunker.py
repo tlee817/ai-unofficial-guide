@@ -1,27 +1,19 @@
 """
 Stage 2 of the pipeline: splitting documents into chunks.
 
-⚠️ THIS IS THE FILE YOU CHANGE IN MILESTONE 3.
+`split_documents` splits each document one paragraph per chunk and prefixes
+every chunk with the document's title and the `##` heading it sits under.
+Written for `city_guides` (Milestone 3): fourteen markdown guides whose
+authors already divided them into headed sections of one or two paragraphs,
+each a complete thought. The chunker follows those boundaries instead of
+counting characters.
 
-`split_documents` below is deliberately plain. It cuts every document into
-fixed-size pieces with a fixed overlap and pays no attention to where sentences
-or paragraphs end. It works, and it is not good.
-
-On a corpus of short posts it may not cut anything at all: `campus_life` comes
-out as 88 documents and 88 chunks, because almost nothing in it reaches 800
-characters. That is the baseline, not a bug — Milestone 3 is where you decide
-whether one post should stay one chunk.
-
-Your job in Milestone 3 is to replace the *body* of `split_documents` with a
-strategy that fits the documents you actually read in Milestone 1. Keep the
-name and the shape of what it returns — the rest of the pipeline calls it, and
-your README has to name the function that produced your chunks.
-
-If you get stuck for 30 minutes, `fallback_split` is the original. Switch back
-to it, write down what you saw, and move on. That's a real observation about
-your pipeline, not giving up.
+`fallback_split` is the starter's original fixed-window chunker. It stays here
+as the baseline for unit 2's before/after comparison — index it with
+`--variant fallback` to keep both side by side.
 """
 
+import re
 from dataclasses import dataclass
 
 import config
@@ -80,24 +72,128 @@ def fallback_split(
     return chunks
 
 
+def _title_and_sections(text: str) -> tuple[str, list[tuple[str | None, str]]]:
+    """
+    Pull the `# title` off the top and split the rest on `## ` headings.
+
+    Returns the title (empty if the document has none) and a list of
+    (heading, body) pairs in document order. Text before the first `##` — the
+    intro paragraph in every town guide — comes back with heading None. A
+    document with no headings at all yields one (None, whole_text) pair, so
+    corpora that aren't markdown still chunk sensibly.
+    """
+    lines = text.split("\n")
+    title = ""
+    if lines and lines[0].startswith("# "):
+        title, lines = lines[0].strip(), lines[1:]
+
+    sections: list[tuple[str | None, str]] = []
+    heading: str | None = None
+    current: list[str] = []
+    for line in lines:
+        if line.startswith("## "):
+            sections.append((heading, "\n".join(current).strip()))
+            heading, current = line.strip(), []
+        else:
+            current.append(line)
+    sections.append((heading, "\n".join(current).strip()))
+
+    return title, [(h, body) for h, body in sections if body]
+
+
+def _paragraphs(body: str) -> list[str]:
+    """Split on blank lines. A single newline is a hard wrap here, not a break."""
+    return [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
+
+
+def _sentences(paragraph: str) -> list[str]:
+    return [s for s in re.split(r"(?<=[.!?])\s+", paragraph) if s]
+
+
+def _pack(paragraphs: list[str], prefix: str) -> list[str]:
+    """
+    Turn one section's paragraphs into chunk texts, each carrying the prefix.
+
+    Two guard rails, both measured against the finished chunk (prefix
+    included), because that is what gets embedded and what criterion 4 counts:
+
+      - Under CHUNK_MIN: merge the paragraph into the previous chunk of this
+        section. If it is the first paragraph, the next one merges into it.
+      - Over CHUNK_SIZE: split the paragraph on sentence ends and pack the
+        sentences greedily up to the ceiling.
+
+    On city_guides the ceiling never triggers and the floor catches four
+    one-sentence asides, so the 150 in criterion 4 holds across the index.
+    """
+    joiner = "\n\n" if prefix else ""
+
+    def finished(body: str) -> str:
+        return f"{prefix}{joiner}{body}"
+
+    merged: list[str] = []
+    for para in paragraphs:
+        too_short = len(finished(para)) < config.CHUNK_MIN
+        prev_short = bool(merged) and len(finished(merged[-1])) < config.CHUNK_MIN
+        if merged and (too_short or prev_short):
+            merged[-1] = f"{merged[-1]}\n\n{para}"
+        else:
+            merged.append(para)
+
+    chunks: list[str] = []
+    for body in merged:
+        if len(finished(body)) <= config.CHUNK_SIZE:
+            chunks.append(finished(body))
+            continue
+        # Rare: a paragraph over the ceiling. Pack whole sentences up to it.
+        room = config.CHUNK_SIZE - len(finished(""))
+        piece: list[str] = []
+        for sentence in _sentences(body):
+            candidate = " ".join(piece + [sentence])
+            if piece and len(candidate) > room:
+                chunks.append(finished(" ".join(piece)))
+                piece = [sentence]
+            else:
+                piece.append(sentence)
+        if piece:
+            chunks.append(finished(" ".join(piece)))
+    return chunks
+
+
 def split_documents(documents: list[Document]) -> list[Chunk]:
     """
-    Split documents into chunks. ⚠️ REPLACE THE BODY OF THIS IN MILESTONE 3.
+    One paragraph per chunk, prefixed with the document title and `##` heading.
 
-    Right now it just calls the fallback. That is the plain, generic behaviour
-    the brief is talking about.
+    Why a paragraph: in city_guides every paragraph is one complete thought,
+    and the fact a question wants is almost always one sentence inside it.
+    Section-sized chunks tested worse — two-paragraph sections diluted the
+    sentence that mattered, and nine towns sharing the same seven headings made
+    same-topic sections from different towns hard to tell apart.
 
-    When you write your own strategy, set `produced_by` to
-    "chunker.py::split_documents" so your README's Sample Chunks section names
-    the right function. `app.py chunks` prints that string for you.
+    Why the prefix: "## Getting there" followed by bus times could be any of
+    nine towns. "# Kestrelford" on the front puts the town name in every
+    chunk, so a question that names the town can match on it.
 
-    Things worth thinking about before you write any code:
-      - Are your documents short posts or long guides?
-      - Is the useful information in one sentence, or spread over a paragraph?
-      - Would splitting on paragraph breaks keep more thoughts intact than
-        splitting on a character count?
+    Why no overlap: overlap repairs cuts mid-thought, and this never cuts
+    mid-thought. CHUNK_MIN and CHUNK_SIZE in config.py are the guard rails —
+    see `_pack`.
     """
-    return fallback_split(documents)
+    chunks: list[Chunk] = []
+    for doc in documents:
+        title, sections = _title_and_sections(doc.text)
+        index = 0
+        for heading, body in sections:
+            prefix = "\n\n".join(part for part in (title, heading) if part)
+            for text in _pack(_paragraphs(body), prefix):
+                chunks.append(
+                    Chunk(
+                        text=text,
+                        source=doc.source,
+                        index=index,
+                        produced_by="chunker.py::split_documents",
+                    )
+                )
+                index += 1
+    return chunks
 
 
 def describe(chunks: list[Chunk]) -> str:
