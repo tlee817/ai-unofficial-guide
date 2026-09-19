@@ -164,30 +164,103 @@ I left it rather than have the chunker rewrite text.
 
 ## Sample Answer
 
-<!-- One complete question and answer, pasted as text, with the source line
-     visible. Milestone 4. -->
+`python app.py ask "Which day is the Givens Mill tearoom closed?"` — test
+question 2, pasted exactly as printed. Produced by `app.py::ask_pipeline` →
+`store.py::search`, `gate.py::check`, `generate.py::answer_from_chunks`.
 
-**Question:**
+**Question:** Which day is the Givens Mill tearoom closed?
 
 **Answer:**
 
 ```
+  (best distance 0.382, cutoff 0.65)
+
+The Givens Mill tearoom is closed on Tuesdays, according to `guide_givens_mill.md`.
+
+Sources retrieved: guide_accessibility.md, guide_eating.md, guide_givens_mill.md, guide_seasons.md
+
+1 model calls this session, 750 tokens (727 in, 23 out)
 ```
 
-**My relevance cutoff:**
+The answer names the one file that actually holds the fact (criterion 5), not
+just any file that was retrieved. Eight chunks went in at 727 tokens — less
+than the starter's five chunks would have cost.
 
-<!-- The number you set in config.py, and how you got there.
+**My relevance cutoff:** 0.65 (`THRESHOLD` in `config.py`). **Top-k:** 8.
 
-     You ran five questions your corpus covers and the five in OUT_OF_SCOPE
-     that it clearly doesn't, and wrote down the best distance for each. What
-     did those two groups look like? Where was the gap? Put the actual numbers
-     here — the table below wants all ten rows.
-
-     Milestone 4. -->
+**How I got there.** I ran all five test questions and the five `OUT_OF_SCOPE`
+questions through `store.py::search` and wrote down the best distance for each
+(no model calls — the gate decides on distance alone). The two groups:
 
 | Question | In corpus? | Best distance |
 |---|---|---|
-|  |  |  |
+| Which day of the week is the Kestrelford market? | yes | 0.251 |
+| Is there mobile phone coverage in Corry Vale? | yes | 0.250 |
+| Which day is the Givens Mill tearoom closed? | yes | 0.382 |
+| Where is the free car park in Pellew Sands? | yes | 0.414 |
+| Which town in the region has restaurant kitchens that serve after 9pm? | yes | 0.450 |
+| What is the capital of Mongolia? | no | 0.803 |
+| What is the recommended dosage of ibuprofen for a headache? | no | 0.835 |
+| How do I write a for loop in Rust? | no | 0.836 |
+| How do I change the oil in a diesel engine? | no | 0.888 |
+| Who won the 1994 World Cup? | no | 0.975 |
+
+In-corpus tops out at **0.450**; out-of-scope starts at **0.803**. The gap is
+0.35 wide and the midpoint is 0.63. I set the cutoff at **0.65** — just above
+the middle, on purpose: my five questions were written by someone who had read
+every document, so real questions will be phrased more loosely and score
+higher. Q3's own answer chunk sits at 0.556, which shows how far the *right*
+content can drift. 0.65 leaves 0.20 of headroom on that side and still refuses
+every different-world question by 0.15 or more. At 0.65 the gate passes 5 of 5
+real questions and refuses 5 of 5 out-of-scope ones. (In Milestone 2 I guessed
+the ibuprofen question would land closest because of the corpus's "minor
+injuries unit" wording. It didn't — Mongolia did, at 0.803, and neither is
+anywhere near the cutoff.)
+
+**What the cutoff cannot do.** I also tried five questions from the *same*
+world that the documents do not answer:
+
+| Same-world question the corpus doesn't answer | Best distance | Gate at 0.65 |
+|---|---|---|
+| Which hotel in Thornby Wells has a spa? | 0.197 | passes |
+| How much does a train ticket from Brightwater to Marchwood cost? | 0.310 | passes |
+| Is there a supermarket in Pellew Sands? | 0.362 | passes |
+| What time does the Kestrelford church tower close? | 0.402 | passes |
+| Which town has the best nightclubs? | 0.609 | passes |
+
+The spa question scores **closer than any of my real questions**, because
+Thornby Wells was a spa town and the guide says so. Distance measures whether a
+question is about the same *topic* as a chunk, not whether the chunk *answers*
+it. No cutoff between 0.45 and 0.80 separates these from real questions — a
+cutoff low enough to catch them would refuse Q3 and Q4. So these are the
+grounding instruction's job, and I tested it:
+
+```
+Q: Which hotel in Thornby Wells has a spa?
+  (best distance 0.197, cutoff 0.65)
+
+Based on the provided documents, I do not have enough information to state which hotel in Thornby Wells has a spa. (Source: guide_thornby_wells.md)
+
+Q: Is there a supermarket in Pellew Sands?
+  (best distance 0.362, cutoff 0.65)
+
+I do not have enough information to answer whether there is a supermarket in Pellew Sands. (Source: guide_pellew_sands.md and guide_accessibility.md)
+```
+
+The retrieved Thornby Wells chunks mention "two large hotels from the spa
+period" — a model answering from general knowledge would have joined those
+dots. It didn't. The instruction in `generate.py::GROUNDING_INSTRUCTION` is
+unchanged from the starter; it held on both probes, so I left it alone rather
+than tune something that wasn't broken.
+
+**Why top-k 8.** With the paragraph chunker, chunks average 281 characters, so
+eight of them is about 2,250 characters of context — less than the starter's
+five 650-character chunks. At top-k 5 the answer to Q3 was at rank 8 and never
+reached the model; at 8 all five answers are in the prompt (ranks 1, 2, 8, 5,
+1). The cost is real but small: retrieval for Q4 puts three wrong towns'
+"Eat and drink" sections above the right one, so the model sees more
+near-misses. The Q2 answer above shows it coping — four files retrieved, the
+one correct file cited.
 
 ## How I Used AI
 
@@ -200,9 +273,9 @@ I left it rather than have the chunker rewrite text.
 
      Milestone 5. -->
 
-**1.**
+**1.** I used AI to evalute different chucking strategies and their tradeoffs. After evaluting tradeoffs, I decided to go with chucking with headers without overlap so it does not cut mid-sentence.
 
-**2.**
+**2.** I used AI to help me code different functions, such as chucking by headers etc, which saved me a lot of time and I could spend more time on evaluating tradeoffs and making decisions.
 
 <!-- ── Stretch features ─────────────────────────────────────────────────────
      Doing one? Say so here BEFORE you start. A feature this README never

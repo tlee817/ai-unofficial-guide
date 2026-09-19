@@ -41,17 +41,28 @@ CHUNK_MIN = 150         # floor, from criterion 4. A paragraph that would come
 
 # ─── Retrieval (Milestone 4) ─────────────────────────────────────────────────
 
-TOP_K = 5               # how many chunks to pull back per question
+# Chunks average 281 characters, so eight of them is ~2,250 characters of
+# context — less than the starter sent with five 650-character chunks. Measured
+# rank of the answer for the five test questions at this setting: 1, 2, 8, 5, 1.
+# At 5, Q3 (Pellew Sands car park) never reached the model.
+TOP_K = 8               # how many chunks to pull back per question
 
 # The relevance gate. If the best chunk is further away than this, the system
 # refuses to answer instead of handing the model thin material.
 #
 # LOWER IS BETTER: 0.3 is a close match, 0.9 is unrelated.
 #
-# 0.6 is a reasonable starting point, not a right answer. Milestone 4 has you
-# measure your own two groups of distances and put the cutoff in the gap.
-# Most corpora land somewhere between 0.45 and 0.75.
-THRESHOLD = 0.6
+# Measured on city_guides with the paragraph chunker (see README, "My
+# relevance cutoff"): the five test questions scored 0.250–0.450; the five
+# OUT_OF_SCOPE questions scored 0.803–0.975. 0.65 sits just above the middle
+# of that gap, leaving headroom for real questions phrased more loosely than
+# mine while refusing every different-world question by 0.15 or more.
+#
+# What the gate cannot do: same-world questions the corpus doesn't answer
+# ("which hotel in Thornby Wells has a spa?") score 0.20–0.45 — like real
+# questions — because distance measures topic, not answerability. Those are
+# caught by the grounding instruction in generate.py, not by this number.
+THRESHOLD = 0.65
 
 
 # ─── Models ──────────────────────────────────────────────────────────────────
