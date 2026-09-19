@@ -29,54 +29,138 @@
 
 ## Chunking Strategy
 
-**Chunk size:**
-**Overlap:**
+**Chunk size:** one paragraph, prefixed with the document's `# title` and the
+paragraph's `## heading`. Measured across the index: 157–509 characters,
+average 281. `CHUNK_SIZE = 800` in `config.py` is a ceiling that is never
+reached; `CHUNK_MIN = 150` is a floor — a paragraph that would come out shorter
+is merged into its neighbour in the same section (that happens four times, all
+one-sentence asides in `guide_seasons.md` and `guide_eating.md`).
+**Overlap:** 0.
 
-<!-- What about YOUR documents made you pick these numbers? Short posts and
-     long sectioned guides don't want the same chunking, and "800 seemed
-     reasonable" earns nothing. Point at something you noticed when you read
-     the documents in Milestone 1.
+**What I saw in Milestone 1.** All fourteen guides are markdown with the same
+shape: a `# title`, an intro paragraph, then `##` sections of one or two
+paragraphs. I measured every section: 84 of them, all between 158 and 691
+characters. The nine town guides use the *same seven headings* in the same
+order, and `## Practical notes` is word-for-word identical in all nine. The
+starter's fixed 800-character windows cut straight through this — `app.py
+chunks` showed a chunk ending in `## Eat and drin` and another that was 24
+characters long.
 
-     If you changed your mind partway through, say so and say why. That's worth
-     more than pretending you got it right first time.
+**What I planned, and why I changed my mind.** My first plan was one `##`
+section per chunk — the structure is obvious and every section fits. Before
+writing it, I compared six strategies in memory using the same embedding model
+and cosine distance the pipeline uses, on my five test questions and the five
+out-of-scope ones. Section-per-chunk retrieved *worse* than the starter: the
+answer stayed in the top 5 for only 4 of 5 questions, two of them at rank 5.
+Two things caused that. Nine towns sharing the same headings means nine
+near-identical "Eat and drink" chunks, so a topic question gets a wall of the
+wrong towns. And Q5's answer ("genuinely absent in parts of Corry Vale") shares
+a section with an unrelated hospital paragraph, which diluted it from 0.25 to
+0.53. Splitting on paragraphs instead fixed the second problem outright. The
+title prefix exists because "## Getting there" followed by bus times could be
+any of nine towns; `# Kestrelford` on the front puts the town name in the
+chunk.
 
-     Milestone 3. -->
+**Why no overlap.** Overlap repairs cuts mid-thought. This chunker never cuts
+mid-thought — every chunk starts at a heading or paragraph and ends at a
+sentence end — so there is nothing to repair, and overlapping unrelated
+paragraphs would only add noise.
+
+**What it cost.** Retrieval-only comparison (`app.py retrieve`, no model call),
+starter chunker kept as index variant `fallback`:
+
+| Question | Before: best distance / rank of answer | After: best distance / rank of answer |
+|---|---|---|
+| Q1 Kestrelford market day | 0.394 / 1 | 0.251 / 1 |
+| Q2 Givens Mill tearoom closed | 0.440 / 1 | 0.382 / 2 |
+| Q3 Pellew Sands free car park | 0.402 / 1 | 0.414 / **not in top 5** |
+| Q4 kitchens after 9pm | 0.431 / 4 | 0.450 / 5 |
+| Q5 Corry Vale coverage | 0.265 / 1 | 0.250 / 1 |
+
+The starter got 5 of 5 by accident of where its 800-character boundaries fell;
+it fails criterion 4 by construction. The new chunker gets 4 of 5 by design.
+Q3 is the loss: six other sections in the corpus talk about "car parks" and
+"free" parking, and the Pellew Sands paragraph says "free *lot*". Smaller
+chunks carry more topic and less document identity, and that question is where
+it shows. **Going into unit 2, Q3 is my predicted criterion 1 miss — not Q5, as
+I wrote in Milestone 2.**
 
 ## Sample Chunks
 
-<!-- Five chunks, pasted as text. Label each one and name the file it came from
-     AND the function that produced it — the grader checks your code against
-     what you claim here.
+From `python app.py chunks -n 5` (111 chunks total, five spread across the
+corpus). For each: could someone answer a question from only this?
 
-     `python app.py chunks -n 5` prints all three for you. Copy them straight
-     across.
-
-     Milestone 3. -->
-
-**Chunk 1** — source: `` — produced by: ``
+**Chunk 1** — source: `guide_accessibility.md#0` — produced by: `chunker.py::split_documents`
 
 ```
+# Getting around the region with limited mobility
+
+An honest assessment rather than a promotional one. Some of these places are
+difficult and it is better to know in advance.
 ```
 
-**Chunk 2** — source: `` — produced by: ``
+The weakest of the five: an intro paragraph that says what the document *is*
+rather than a fact about a place. It stands alone, but no test question would
+land on it. It stays because dropping intros would lose the town descriptions
+("a Victorian seaside resort", "a working fishing port") in the other guides.
+
+**Chunk 2** — source: `guide_corry_vale.md#3` — produced by: `chunker.py::split_documents`
 
 ```
+# Corry Vale
+
+## Eat and drink
+
+One pub in the largest village serves food seven days a week. A second, in the third village, opens Thursday to Sunday. There is a farm shop at the valley mouth that sells bread, cheese and little else, and it closes at 4pm. Bring supplies; this is not a place with options.
 ```
 
-**Chunk 3** — source: `` — produced by: ``
+Yes. Which place, which topic, and four concrete facts. "When does the Corry
+Vale farm shop close?" is answerable from this alone.
+
+**Chunk 3** — source: `guide_givens_mill.md#3` — produced by: `chunker.py::split_documents`
 
 ```
+# Givens Mill
+
+## Eat and drink
+
+A tearoom attached to the mill, open 10 to 4 daily except Tuesdays, which sells bread made from the flour ground twenty metres away and is the reason most people come. One pub, food served lunchtimes and Thursday to Saturday evenings.
 ```
 
-**Chunk 4** — source: `` — produced by: ``
+Yes — this is the chunk that answers test question 2 ("Which day is the Givens
+Mill tearoom closed?"). The answer is one clause inside one sentence, and the
+chunk is small enough that it isn't buried.
+
+**Chunk 4** — source: `guide_marchwood.md#1` — produced by: `chunker.py::split_documents`
 
 ```
+# Marchwood
+
+## Getting there
+
+Every railway line in the region meets here, which is the city's defining feature. Trains to Brightwater run every 40 minutes until 11pm. The airport is 20 minutes out by a dedicated bus that runs every 15 minutes and costs more than the equivalent taxi shared between three people.
 ```
 
-**Chunk 5** — source: `` — produced by: ``
+Yes. Without the `# Marchwood` line this would be an anonymous "Getting there"
+— nine documents have one. The prefix is doing its job here.
+
+**Chunk 5** — source: `guide_regional_transport.md#7` — produced by: `chunker.py::split_documents`
 
 ```
+# Getting around the region
+
+## Walking and cycling
+
+Cycling is pleasant on the river path and the trackbed, and unpleasant on Mill
+Road and the coast road, neither of which has a shoulder.
 ```
+
+Yes, narrowly. One thought, complete. It is the second paragraph of its
+section — the first, about walking routes, is its own chunk — and this is the
+case for paragraph-level over section-level: "is the coast road good for
+cycling?" matches this cleanly instead of a chunk that is mostly about
+footpaths. The hard line-wrap after "Mill" is how the source file is written;
+I left it rather than have the chunker rewrite text.
 
 ## Sample Answer
 
